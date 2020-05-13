@@ -6,6 +6,9 @@
 <body>
 <h1>Spotify Web Playback SDK Quick Start Tutorial</h1>
 <h2>Open your console log: <code>View > Developer > JavaScript Console</code></h2>
+<button id="play" type="button">Play</button>
+<button id="pause" type="button">Pause</button>
+
 
 <!-- The core Firebase JS SDK is always required and must be listed first -->
 <script src="/__/firebase/7.14.3/firebase-app.js"></script>
@@ -14,18 +17,39 @@
 
 <!-- Initialize Firebase -->
 <script src="/__/firebase/init.js"></script>
-<script>
-    const database = firebase.database();
-    const roomRef = database.ref('rooms/12345');
-</script>
 
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script>
-    window.onSpotifyWebPlaybackSDKReady = () => {
-        const token = 'TOKEN';
+    const database = firebase.database();
+    const roomRef = database.ref('rooms/12345');
+
+    function sleep(ms) {
+        return new Promise((resolve) => {
+            setTimeout(resolve, ms);
+        });
+    }
+
+    /**
+     * Obtains parameters from the hash of the URL
+     * https://stackoverflow.com/a/901144
+     * @return String
+     */
+    function getParam(name, url) {
+        if (!url) url = window.location.href;
+        name = name.replace(/[\[\]]/g, '\\$&');
+        var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+            results = regex.exec(url);
+        if (!results) return null;
+        if (!results[2]) return '';
+        return decodeURIComponent(results[2].replace(/\+/g, ' '));
+    }
+
+    const access_token = getParam('access_token');
+
+    window.onSpotifyWebPlaybackSDKReady = async () => {
         const player = new Spotify.Player({
-            name: 'Web Playback SDK Quick Start Player',
-            getOAuthToken: cb => { cb(token); }
+            name: 'SpotifySync',
+            getOAuthToken: cb => { cb(access_token); }
         });
 
         // Error handling
@@ -40,6 +64,40 @@
         // Ready
         player.addListener('ready', ({ device_id }) => {
             console.log('Ready with Device ID', device_id);
+
+            // Transfer playback to the browser
+            fetch(`https://api.spotify.com/v1/me/player`, {
+                method: 'PUT',
+                body: JSON.stringify({ device_ids: [device_id] }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${access_token}`
+                },
+            }).then(async function(response) {
+                console.log(`Status code for transfer user's playback: ${response.status}`);
+
+                await sleep(100); // Doesn't play the new song correctly; switching too fast?
+
+                roomRef.child('current_track').once('value').then(function(snapshot) {
+                    if (snapshot.val().is_playing) {
+                        fetch(`https://api.spotify.com/v1/me/player/play`, {
+                            method: 'PUT',
+                            body: JSON.stringify({
+                                uris: [snapshot.val().uri],
+                                position_ms: snapshot.val().position_ms
+                            }),
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${access_token}`
+                            },
+                        }).then(function(response2) { // choose better name? shadows outer response variable
+                            player.resume().then(() => {
+                                console.log('Resumed!');
+                            });
+                        });
+                    }
+                });
+            });
         });
 
         // Not Ready
@@ -48,13 +106,16 @@
         });
 
         // Connect to the player!
-        player.connect();
+        await player.connect().then(success => {
+            if (success) {
+                console.log('The Web Playback SDK successfully connected to Spotify!');
+            }
+        });
 
+        let listener = roomRef.child('current_track/is_playing').on('value', function(snapshot) {
+            const is_playing = snapshot.val();
 
-        let listener = roomRef.child('playing').on('value', function(snapshot) {
-            const playing = snapshot.val();
-
-            if (playing) {
+            if (is_playing) {
                 player.resume().then(() => {
                     console.log('Resumed!');
                 });
@@ -63,6 +124,26 @@
                     console.log('Paused!');
                 });
             }
+        });
+
+        document.getElementById("play").addEventListener('click', function() {
+            roomRef.child('current_track/is_playing').set(true, function(error) {
+                if (error) {
+                    console.log(error);
+                } else {
+                    console.log('Updated database correctly!')
+                }
+            });
+        });
+
+        document.getElementById("pause").addEventListener('click', function() {
+            roomRef.child('current_track/is_playing').set(false, function(error) {
+                if (error) {
+                    console.log(error);
+                } else {
+                    console.log('Updated database correctly!')
+                }
+            });
         });
     };
 </script>
