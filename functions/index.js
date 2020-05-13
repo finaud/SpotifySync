@@ -15,9 +15,9 @@ const cors = require('cors');
 const querystring = require('querystring');
 const cookieParser = require('cookie-parser');
 
-const client_id = functions.config().someservice.id; // Your client id
-const client_secret = functions.config().someservice.secret; // Your secret
-const redirect_uri = functions.config().someservice.redirect; // Redirect URI
+const client_id = functions.config().spotify.id; // Your client id
+const client_secret = functions.config().spotify.secret; // Your secret
+const redirect_uri = functions.config().spotify.redirect; // Redirect URI
 
 /**
  * Generates a random string containing numbers and letters
