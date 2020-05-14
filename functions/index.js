@@ -104,31 +104,9 @@ app.get('/callback', function (req, res) {
                 const access_token = body.access_token,
                     refresh_token = body.refresh_token;
 
-                const options = {
-                    url: 'https://api.spotify.com/v1/me',
-                    headers: {'Authorization': 'Bearer ' + access_token},
-                    json: true
-                };
-
-                // use the access token to access the Spotify Web API
-                request.get(options, function (error, response, body) {
-                    console.log(body);
-                });
-
-                // we can also pass the token to the browser to make requests from there
-                // res.redirect('/#' +
-                //     querystring.stringify({
-                //         access_token: access_token,
-                //         refresh_token: refresh_token
-                //     }));
                 res.redirect('/player.html?' + querystring.stringify({access_token: access_token}));
             } else {
-                // res.redirect('/#' +
-                //     querystring.stringify({
-                //         error: 'invalid_token'
-                //     }));
                 res.redirect('/player.html?' + querystring.stringify({error: 'invalid_token'}));
-
             }
         });
     }
@@ -156,12 +134,6 @@ app.get('/refresh_token', function (req, res) {
             });
         }
     });
-});
-
-app.get('/player', function (req, res) {
-    const access_token = req.query.access_token; // received from Spotify callback
-
-    res.redirect('/player.html?' + querystring.stringify({access_token: access_token}));
 });
 
 exports.app = functions.https.onRequest(app);

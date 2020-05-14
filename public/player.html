@@ -8,6 +8,8 @@
 <h2>Open your console log: <code>View > Developer > JavaScript Console</code></h2>
 <button id="play" type="button">Play</button>
 <button id="pause" type="button">Pause</button>
+<button id="queue" type="button">Queue Song</button>
+
 
 
 <!-- The core Firebase JS SDK is always required and must be listed first -->
@@ -143,6 +145,13 @@
                 } else {
                     console.log('Updated database correctly!')
                 }
+            });
+        });
+
+        document.getElementById("queue").addEventListener('click', function() {
+            roomRef.child('queue').push({
+                uri: 'spotify:track:3vVXzKIlFLYERxMaVFukyr',
+                added_by: 'antoine'
             });
         });
     };
