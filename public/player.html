@@ -16,6 +16,7 @@
 <script src="/__/firebase/7.14.3/firebase-app.js"></script>
 
 <script src="/__/firebase/7.14.3/firebase-database.js"></script>
+<script src="/__/firebase/7.14.3/firebase-functions.js"></script>
 
 <!-- Initialize Firebase -->
 <script src="/__/firebase/init.js"></script>
@@ -23,6 +24,10 @@
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <script>
     const database = firebase.database();
+    const functions = firebase.functions();
+
+    const playNext = functions.httpsCallable('playNext');
+
     const roomRef = database.ref('rooms/12345');
 
     function sleep(ms) {
@@ -63,6 +68,15 @@
         // Playback status updates
         player.addListener('player_state_changed', state => { console.log(state); });
 
+        player.addListener('player_state_changed', ({ position, duration }) => {
+            if (duration - position <= 200) {
+                playNext({room: roomRef.key}).then(function(result) {
+                    console.log(result.data.message);
+                });
+            }
+        });
+
+
         // Ready
         player.addListener('ready', ({ device_id }) => {
             console.log('Ready with Device ID', device_id);
@@ -75,10 +89,19 @@
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${access_token}`
                 },
-            }).then(async function(response) {
+            }).then(function(response) {
                 console.log(`Status code for transfer user's playback: ${response.status}`);
 
-                await sleep(100); // Doesn't play the new song correctly; switching too fast?
+                // Turn repeat mode off
+                fetch(`https://api.spotify.com/v1/me/player/repeat?state=off`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${access_token}`
+                    },
+                })
+            }).then(async function(response) {
+                await sleep(500); // Doesn't play the new song correctly; switching too fast?
 
                 roomRef.child('current_track').once('value').then(function(snapshot) {
                     if (snapshot.val().is_playing) {
@@ -107,14 +130,14 @@
             console.log('Device ID has gone offline', device_id);
         });
 
-        // Connect to the player!
+        // Connect to the player
         await player.connect().then(success => {
             if (success) {
                 console.log('The Web Playback SDK successfully connected to Spotify!');
             }
         });
 
-        let listener = roomRef.child('current_track/is_playing').on('value', function(snapshot) {
+        roomRef.child('current_track/is_playing').on('value', function(snapshot) {
             const is_playing = snapshot.val();
 
             if (is_playing) {
@@ -126,6 +149,26 @@
                     console.log('Paused!');
                 });
             }
+        });
+
+        roomRef.child('current_track/uri').on('value', function(snapshot) {
+            const uri = snapshot.val();
+
+            roomRef.child('current_track').once('value').then(function(snapshot) {
+                fetch(`https://api.spotify.com/v1/me/player/play`, {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        uris: [snapshot.val().uri],
+                        position_ms: snapshot.val().position_ms // set to 0 and seek after track is switched?
+                    }),
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${access_token}`
+                    },
+                }).then(function(response2) { // choose better name? shadows outer response variable
+                    console.log('Playing new song!');
+                });
+            });
         });
 
         document.getElementById("play").addEventListener('click', function() {
