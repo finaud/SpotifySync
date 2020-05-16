@@ -1,5 +1,5 @@
 # SpotifySync
-A simple app for listening to Spotify synchronously with friends. 
+A simple app for listening to Spotify synchronously with friends!
 
 ## Local Testing
 Run `firebase functions:config:get > .runtimeconfig.json` to save the config variables, and change the value of 
