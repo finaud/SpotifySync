@@ -54,6 +54,9 @@
     const access_token = getParam('access_token');
 
     window.onSpotifyWebPlaybackSDKReady = async () => {
+
+        let swapping = false;
+
         const player = new Spotify.Player({
             name: 'SpotifySync',
             getOAuthToken: cb => { cb(access_token); }
@@ -66,12 +69,63 @@
         player.addListener('playback_error', ({ message }) => { console.error(message); });
 
         // Playback status updates
-        player.addListener('player_state_changed', state => { console.log(state); });
+        // player.addListener('player_state_changed', state => { console.log(state); });
+
+        // Starting the next song
+        player.addListener('player_state_changed', (state) => {
+            if (state.paused && !state.position && state.track_window.previous_tracks.length === 1 && !swapping) {
+                roomRef.once('value').then(async ( snapshot) => {
+                    if (snapshot.val().is_swapping) {
+                        console.log('Already swapping tracks');
+                    } else {
+                        roomRef.child('/is_swapping').set(true); // move closer to top of function?
+
+                        console.log('Swapping tracks');
+
+                        roomRef.child('/queue').orderByKey().limitToFirst(1).once('value').then((snap) => {
+
+                            for (const queue_key in snap.val()) {
+                                data = snap.val()[queue_key];
+
+                                roomRef.child('/queue/' + queue_key).remove();
+
+                                roomRef.child('/current_track').update({
+                                    uri: data.uri,
+                                    added_by: data.added_by,
+                                    is_playing: true,
+                                    position_ms: 0
+                                }).catch();
+                            }
+                        });
+
+                        await sleep(1000);
+
+                        roomRef.child('/is_swapping').set(false);
+                    }
+                });
+            }
+        });
+
+        //TODO: listener to update server when user locally changes tracks ?
 
         player.addListener('player_state_changed', ({ position, duration }) => {
-            if (duration - position <= 200) {
-                playNext({room: roomRef.key}).then(function(result) {
-                    console.log(result.data.message);
+
+            if (position && Number.isInteger(position) && !swapping) {
+                console.log(`Position: ${position} Duration: ${duration}`)
+
+                // Syncing client position with server's
+                roomRef.child('current_track/position_ms').once('value').then((snapshot) => {
+                    const server_position = snapshot.val();
+
+                    if (Math.abs(server_position - position) >= 1000) {
+                        roomRef.child('current_track/position_ms').set(position, function(error) {
+                            if (error) {
+                                console.log(error);
+                            } else {
+                                console.log('Updated server position!');
+                            }
+                        });
+                    }
                 });
             }
         });
@@ -104,6 +158,8 @@
                 await sleep(500); // Doesn't play the new song correctly; switching too fast?
 
                 roomRef.child('current_track').once('value').then(function(snapshot) {
+
+                    // move .is_playing after?
                     if (snapshot.val().is_playing) {
                         fetch(`https://api.spotify.com/v1/me/player/play`, {
                             method: 'PUT',
@@ -138,38 +194,82 @@
         });
 
         roomRef.child('current_track/is_playing').on('value', function(snapshot) {
-            const is_playing = snapshot.val();
+            if (!swapping) {
+                const is_playing = snapshot.val();
 
-            if (is_playing) {
-                player.resume().then(() => {
-                    console.log('Resumed!');
-                });
-            } else {
-                player.pause().then(() => {
-                    console.log('Paused!');
+                if (is_playing) {
+                    player.resume().then(() => {
+                        console.log('Resumed!');
+                    });
+                } else {
+                    player.pause().then(() => {
+                        console.log('Paused!');
+                    });
+                }
+            }
+        });
+
+        roomRef.child('current_track/is_swapping').on('value', function(snapshot) {
+            swapping = snapshot.val();
+
+            if (!swapping) {
+                roomRef.child('current_track').once('value').then((snapshot) => {
+                    const uri = snapshot.val().uri;
+
+                    fetch(`https://api.spotify.com/v1/me/player/play`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            uris: [server_uri],
+                            position_ms: 0
+                        }),
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${access_token}`
+                        },
+                    }).then((response) => {
+                        console.log('Playing new song!');
+                    });
+
                 });
             }
         });
 
-        roomRef.child('current_track/uri').on('value', function(snapshot) {
-            const uri = snapshot.val();
-
-            roomRef.child('current_track').once('value').then(function(snapshot) {
-                fetch(`https://api.spotify.com/v1/me/player/play`, {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                        uris: [snapshot.val().uri],
-                        position_ms: snapshot.val().position_ms // set to 0 and seek after track is switched?
-                    }),
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${access_token}`
-                    },
-                }).then(function(response2) { // choose better name? shadows outer response variable
-                    console.log('Playing new song!');
-                });
+        roomRef.child('current_track/position_ms').on('value', function(snapshot) {
+            const server_position = snapshot.val();
+            player.getCurrentState().then(({ position }) => {
+                if (!swapping) {
+                    if (Math.abs(server_position - position) >= 1000) { // Syncing with server for track position
+                        player.seek(server_position).then(() => {
+                            console.log("Synced client with server position.");
+                        });
+                    }
+                }
             });
         });
+
+
+        roomRef.child('current_track/uri').on('value', function(snapshot) {
+            const server_uri = snapshot.val();
+
+            player.getCurrentState().then(({ track_window: {current_track} }) => {
+                if (server_uri !== current_track.uri && !swapping) { // Syncing with server for new song
+                    fetch(`https://api.spotify.com/v1/me/player/play`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            uris: [server_uri],
+                            position_ms: 0
+                        }),
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${access_token}`
+                        },
+                    }).then((response) => {
+                        console.log('Playing new song!');
+                    });
+                }
+            });
+        });
+
 
         document.getElementById("play").addEventListener('click', function() {
             roomRef.child('current_track/is_playing').set(true, function(error) {
@@ -195,6 +295,16 @@
             roomRef.child('queue').push({
                 uri: 'spotify:track:3vVXzKIlFLYERxMaVFukyr',
                 added_by: 'antoine'
+            });
+
+            roomRef.child('queue').push({
+                uri: 'spotify:track:24Yi9hE78yPEbZ4kxyoXAI',
+                added_by: 'calvin'
+            });
+
+            roomRef.child('queue').push({
+                uri: 'spotify:track:0VjIjW4GlUZAMYd2vXMi3b',
+                added_by: 'joonsung'
             });
         });
     };
