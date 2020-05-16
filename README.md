@@ -2,6 +2,8 @@
 A simple app for listening to Spotify synchronously with friends!
 
 ## Local Testing
+Set up the directory with the appropriate Firebase project.
+
 Run `firebase functions:config:get > .runtimeconfig.json` to save the config variables, and change the value of 
 `redirect` to `"http://localhost:5000/callback"`. This needs to be done only once.
 
