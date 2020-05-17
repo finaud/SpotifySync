@@ -160,23 +160,25 @@
             const snapshot = await roomRef.child('current_track').once('value')
             const { is_playing, uri, position_ms } = snapshot.val()
             // move .is_playing after?
-            if (is_playing) {
-                fetch(`https://api.spotify.com/v1/me/player/play`, {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                        uris: [uri],
-                        position_ms: position_ms
-                    }),
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${access_token}`
-                    },
-                }).then((response2) => { // choose better name? shadows outer response variable
-                    player.resume().then(() => {
-                        console.log('Resumed!');
+            fetch(`https://api.spotify.com/v1/me/player/play`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    uris: [uri],
+                    position_ms: position_ms
+                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${access_token}`
+                },
+            }).then((response2) => { // choose better name? shadows outer response variable
+                if (!is_playing) {
+                    player.pause().then(() => {
+                        console.log('Paused!');
                     });
-                });
-            }
+                } else {
+                    console.log('Resumed!');
+                }
+            });
         });
 
         // Not Ready
