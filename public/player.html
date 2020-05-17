@@ -74,7 +74,7 @@
         // Starting the next song
         player.addListener('player_state_changed', async (state) => {
             if (state.paused && !state.position && state.track_window.previous_tracks.length === 1 && !swapping) {
-                const snapshot = await roomRef.once('value')
+                const snapshot = await roomRef.once('value');
                 if (snapshot.val().is_swapping) {
                     console.log('Already swapping tracks');
                 } else {
@@ -83,7 +83,7 @@
                     console.log('Swapping tracks');
 
                     try {
-                        const snap = await roomRef.child('/queue').orderByKey().limitToFirst(1).once('value')
+                        const snap = await roomRef.child('/queue').orderByKey().limitToFirst(1).once('value');
 
                         for (const queue_key in snap.val()) {
                             data = snap.val()[queue_key];
@@ -98,7 +98,7 @@
                             })
                         }
                     } catch {
-                        console.err("Error fetching queue?")
+                        console.err("Error fetching queue?");
                     }
 
                     await sleep(1000);
@@ -116,7 +116,7 @@
                 console.log(`Position: ${position} Duration: ${duration}`)
 
                 // Syncing client position with server's
-                const snapshot = await roomRef.child('current_track/position_ms').once('value')
+                const snapshot = await roomRef.child('current_track/position_ms').once('value');
                 const server_position = snapshot.val();
 
                 if (Math.abs(server_position - position) >= 1000) {
@@ -157,7 +157,7 @@
             })
             await sleep(500); // Doesn't play the new song correctly; switching too fast?
 
-            const snapshot = await roomRef.child('current_track').once('value')
+            const snapshot = await roomRef.child('current_track').once('value');
             const { is_playing, uri, position_ms } = snapshot.val()
             // move .is_playing after?
             fetch(`https://api.spotify.com/v1/me/player/play`, {
@@ -213,8 +213,8 @@
             swapping = snapshot.val();
 
             if (!swapping) {
-                const snapshot = await roomRef.child('current_track').once('value')
-                const { uri } = snapshot.val()
+                const snapshot = await roomRef.child('current_track').once('value');
+                const { uri } = snapshot.val();
 
                 fetch(`https://api.spotify.com/v1/me/player/play`, {
                     method: 'PUT',
@@ -235,8 +235,8 @@
 
         roomRef.child('current_track/position_ms').on('value',async (snapshot) => {
             const server_position = snapshot.val();
-            const state = await player.getCurrentState()
-            const { position } = state
+            const state = await player.getCurrentState();
+            const { position } = state;
             if (!swapping) {
                 if (Math.abs(server_position - position) >= 1000) { // Syncing with server for track position
                     player.seek(server_position).then(() => {
@@ -249,8 +249,8 @@
 
         roomRef.child('current_track/uri').on('value', async (snapshot) => {
             const server_uri = snapshot.val();
-            const state = await player.getCurrentState()
-            const { track_window : {current_track }} = state
+            const state = await player.getCurrentState();
+            const { track_window : {current_track }} = state;
             if (server_uri !== current_track.uri && !swapping) { // Syncing with server for new song
                 fetch(`https://api.spotify.com/v1/me/player/play`, {
                     method: 'PUT',
@@ -307,5 +307,8 @@
         });
     };
 </script>
+
+<script src="js/queue.js"></script>
+
 </body>
 </html>
