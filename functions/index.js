@@ -128,6 +128,10 @@ app.get('/callback', function (req, res) {
     }
 });
 
+app.get('/joinRoom', function (req, res) {
+    res.redirect('/join-room.html');
+});
+
 app.get('/refresh_token', function (req, res) {
 
     // requesting access token from refresh token
