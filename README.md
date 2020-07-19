@@ -1,4 +1,4 @@
-# SpotifySync
+# SyncSpotify
 A simple app for listening to Spotify synchronously with friends!
 
 ## Local Testing
